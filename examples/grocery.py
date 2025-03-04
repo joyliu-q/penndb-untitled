@@ -303,6 +303,7 @@ def compare_products(merged_df: EDF) -> EDF:
     return EDF(results)
 
 
+pipeline.visualize()
 results = pipeline.run()
 step5_df = results["compare_products"]
 step5_df = step5_df.register_natural_error(

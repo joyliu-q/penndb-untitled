@@ -3,6 +3,7 @@
 import functools
 import logging
 import typing as t
+from graphviz import Digraph
 
 from error import PipelineError
 from edf import EDF
@@ -145,6 +146,34 @@ class Pipeline:
             execute_stage(stage)
 
         return results
+
+    def visualize(self, filename: t.Optional[str] = None) -> None:
+        """
+        Visualize the pipeline as a DAG using graphviz.
+        
+        Args:
+            filename: Name of the output file (without extension)
+        """
+        dot = Digraph(comment=f'Pipeline: {self.name}')
+        dot.attr(rankdir='LR')
+        if filename is None:
+            filename = self.name
+
+        for stage_name, stage in self.stages.items():
+            color = {
+                ExtractStage: 'lightblue',
+                TransformStage: 'lightgreen',
+                FoldStage: 'lightyellow',
+                AggregateStage: 'lightpink'
+            }.get(type(stage), 'white')
+            
+            dot.node(stage_name, stage_name, style='filled', fillcolor=color)
+
+        for stage_name, stage in self.stages.items():
+            for dep in stage.get_dependencies():
+                dot.edge(dep.name, stage_name)
+
+        dot.render(filename, view=True, format='svg')
 
 
 class ExtractStage(ETLStage):

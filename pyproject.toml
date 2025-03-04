@@ -1,0 +1,27 @@
+[project]
+name = "experiment"
+version = "0.1.0"
+description = "EDF and Provenance Store"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "flake8>=7.1.2",
+    "kaggle>=1.6.17",
+    "kagglehub>=0.3.10",
+    "langchain-community>=0.3.19",
+    "langchain-core>=0.3.41",
+    "langchain-openai>=0.3.7",
+    "numpy>=2.2.3",
+    "openai>=1.65.2",
+    "pandas>=2.2.3",
+    "requests>=2.32.3",
+]
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+    "ruff>=0.9.9",
+]
+
+[tool.black]
+line-length = 100

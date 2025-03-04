@@ -13,32 +13,74 @@ from abc import ABC
 T = t.TypeVar("T")
 
 
+# TODO: All stages belong to a pipeline, which thye must be registered to
+class ETLStage(ABC):
+    """Base class for all ETL stages."""
+
+    def __init__(self, name: str):
+        self.name = name
+        self.dependencies: t.List[ETLStage] = []
+        self.result = None
+
+    def add_dependency(self, stage: 'ETLStage'):
+        self.dependencies.append(stage)
+
+    def get_dependencies(self) -> t.List['ETLStage']:
+        return self.dependencies
+
+    @property
+    def has_run(self) -> bool:
+        return self.result is not None
+
+
 class Pipeline:
     def __init__(self, name: str):
         self.name = name
-        self.stages: t.List[ETLStage] = []
+        self.stages: t.Dict[str, ETLStage] = {}  # Changed to dict for name lookup
+        self.last_stage: t.Optional[ETLStage] = None
 
-    def add_stage(self, stage: "ETLStage"):
-        self.stages.append(stage)
+    def add_stage(self, stage: ETLStage):
+        """Add a stage to the pipeline without creating automatic dependencies"""
+        self.stages[stage.name] = stage
+        self.last_stage = stage
 
-    def execute(self):
-        for stage in self.stages:
-            stage.execute()
+    def depends_on(self, *stage_names: str):
+        """Decorator to specify stage dependencies"""
+        def decorator(func):
+            @functools.wraps(func)
+            def wrapper(*args, **kwargs):
+                return func(*args, **kwargs)
+            
+            # Store dependencies to be resolved when the stage is created
+            wrapper._dependencies = stage_names
+            return wrapper
+        return decorator
 
-    # --- Stage Decorators: tuple level ---
+    def _create_stage(self, func: t.Callable, stage_class: t.Type[ETLStage]) -> ETLStage:
+        """Helper to create a stage with dependencies"""
+        stage = stage_class(func.__name__, func)
+        
+        # Add explicit dependencies if specified
+        if hasattr(func, '_dependencies'):
+            for dep_name in func._dependencies:
+                if dep_name not in self.stages:
+                    raise ValueError(f"Dependency '{dep_name}' not found for stage '{func.__name__}'")
+                stage.add_dependency(self.stages[dep_name])
+        
+        return stage
+
     def extract(self, func: t.Callable[[], EDF]) -> t.Callable[[], EDF]:
-        """Decorator for creating a ExtractStage."""
-        stage = ExtractStage(func.__name__, func)
+        """Decorator for creating an ExtractStage."""
+        stage = self._create_stage(func, ExtractStage)
         self.add_stage(stage)
 
         def wrapper() -> EDF:
             return stage.execute()
-
         return wrapper
 
     def transform(self, func: t.Callable[[EDF], EDF]) -> t.Callable[[EDF], EDF]:
         """Decorator for creating a TransformStage."""
-        stage = TransformStage(func.__name__, func)
+        stage = self._create_stage(func, TransformStage)
         self.add_stage(stage)
 
         def wrapper(df: EDF) -> EDF:
@@ -48,7 +90,7 @@ class Pipeline:
 
     def fold(self, func: t.Callable[[EDF], T]) -> t.Callable[[EDF], T]:
         """Decorator for creating a FoldStage."""
-        stage = FoldStage(func.__name__, func)
+        stage = self._create_stage(func, FoldStage)
         self.add_stage(stage)
 
         def wrapper(df: EDF) -> T:
@@ -58,7 +100,7 @@ class Pipeline:
 
     def aggregate(self, func: t.Callable[[t.List[EDF]], EDF]) -> t.Callable[[t.List[EDF]], EDF]:
         """Decorator for creating an AggregateStage."""
-        stage = AggregateStage(func.__name__, func)
+        stage = self._create_stage(func, AggregateStage)
         self.add_stage(stage)
 
         def wrapper(dfs: t.List[EDF]) -> EDF:
@@ -66,13 +108,43 @@ class Pipeline:
 
         return wrapper
 
+    def run(self) -> t.Dict[str, t.Any]:
+        """Execute the pipeline in dependency order"""
+        results = {}
+        executed = set()
 
-# TODO: All stages belong to a pipeline, which thye must be registered to
-class ETLStage(ABC):
-    """Base class for all ETL stages."""
+        def execute_stage(stage: ETLStage):
+            if stage.name in executed:
+                return stage.result
 
-    def __init__(self, name: str):
-        self.name = name
+            dep_results = []
+            for dep in stage.dependencies:
+                dep_result = execute_stage(dep)
+                dep_results.append(dep_result)
+
+            if isinstance(stage, ExtractStage):
+                if dep_results:
+                    raise ValueError(f"Extract stage {stage.name} should not have dependencies")
+                stage.result = stage.execute()
+            elif isinstance(stage, TransformStage):
+                if len(dep_results) != 1:
+                    raise ValueError(f"Transform stage {stage.name} expects exactly one dependency, got {len(dep_results)}")
+                stage.result = stage.execute(dep_results[0])
+            elif isinstance(stage, FoldStage):
+                if len(dep_results) != 1:
+                    raise ValueError(f"Fold stage {stage.name} expects exactly one dependency, got {len(dep_results)}")
+                stage.result = stage.execute(dep_results[0])
+            elif isinstance(stage, AggregateStage):
+                stage.result = stage.execute(dep_results)  # Aggregate can take multiple dependencies
+
+            executed.add(stage.name)
+            results[stage.name] = stage.result
+            return stage.result
+
+        for stage in self.stages.values():
+            execute_stage(stage)
+
+        return results
 
 
 class ExtractStage(ETLStage):

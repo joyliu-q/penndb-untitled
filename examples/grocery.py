@@ -53,9 +53,6 @@ def load_internal_data() -> EDF:
         return edf
 
 
-step1_df = load_internal_data()
-print(step1_df.query_errors())
-
 
 @pipeline.extract
 def fetch_external_data() -> EDF:
@@ -84,17 +81,13 @@ def fetch_external_data() -> EDF:
         return df
 
 
-# TODO: Add scraping as a new source of data
-step2_df = fetch_external_data()
-print(step2_df.query_errors())
-
-
 @pipeline.transform
 @pipeline_error_handler(
     stage_name="clean_external_data",
     error_classes=(KeyError, ValueError),
     default_category=PipelineError.EXTERNAL_ERROR,
 )
+@pipeline.depends_on("fetch_external_data")
 def clean_external_data(competitor_df: EDF) -> EDF:
     """
     Clean external data:
@@ -136,9 +129,6 @@ def clean_external_data(competitor_df: EDF) -> EDF:
     return competitor_df
 
 
-step3_df = clean_external_data(step2_df)
-print(step3_df.query_errors())
-
 
 @pipeline.aggregate
 @pipeline_error_handler(
@@ -146,6 +136,7 @@ print(step3_df.query_errors())
     error_classes=(ValueError, RowLevelPipelineError),
     default_category=PipelineError.BAD_RESPONSE,
 )
+@pipeline.depends_on("load_internal_data", "clean_external_data")
 def merge_data(dfs: t.List[EDF]) -> EDF:
     internal_df, external_df = dfs
     limit_rows = 100
@@ -246,10 +237,6 @@ Products:
         return edf
 
 
-# Example usage (will only process the first 100 rows):
-step4_df = merge_data([step1_df, step3_df])
-print(step4_df.query_errors())
-
 
 @pipeline.fold
 @pipeline_error_handler(
@@ -257,6 +244,7 @@ print(step4_df.query_errors())
     error_classes=(KeyError, ValueError, TypeError),  # Only catch expected errors
     default_category=PipelineError.BAD_RESPONSE,
 )
+@pipeline.depends_on("merge_data")
 def compare_products(merged_df: EDF) -> EDF:
     """
     Compare products in the merged DataFrame and classify them based on:
@@ -315,9 +303,8 @@ def compare_products(merged_df: EDF) -> EDF:
     return EDF(results)
 
 
-step5_df = compare_products(step4_df)
-print(step5_df.query_errors())
-
+results = pipeline.run()
+step5_df = results["compare_products"]
 step5_df = step5_df.register_natural_error(
     """DATA QUALITY ERROR: if the category is a 'Hummus, Dips, & Salsa' then the 
     apistore_product must also be an actual 'Hummus, Dips, & Salsa'""",

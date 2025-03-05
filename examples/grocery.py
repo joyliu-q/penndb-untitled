@@ -8,6 +8,7 @@ from langchain.prompts import PromptTemplate
 from utils import OPENAI_API_KEY, get_llm
 from agent import SearchSerperAgent
 
+import requests
 import pandas as pd
 import typing as t
 import os
@@ -21,7 +22,7 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 def load_internal_data() -> EDF:
     try:
         file_path = os.path.join(os.path.dirname(__file__), "data", "WMT_Grocery_202209.csv")
-        df = pd.read_csv(file_path)
+        df = pd.read_csv(file_path, low_memory=False)
         # convert schema to product_name -> product, price_current -> price
         df = df.rename(
             columns={
@@ -129,7 +130,7 @@ def clean_external_data(competitor_df: EDF) -> EDF:
 @pipeline.transform
 @pipeline_error_handler(
     stage_name="enrich_internal_data_with_web",
-    error_classes=(KeyError, ValueError),
+    error_classes=(requests.exceptions.HTTPError, ValueError, KeyError),
     default_category=PipelineError.EXTERNAL_ERROR,
 )
 @pipeline.depends_on("load_internal_data")
@@ -348,11 +349,13 @@ def assess_aggregate_relationships(dataframe: EDF) -> EDF:
     return EDF({"competitor_product_analysis": [output]})
 
 
-pipeline.visualize()
 results = pipeline.run()
+pipeline.visualize()
 final_df = results["assess_aggregate_relationships"]
+print("=" * 10 + "Final DataFrame" + "=" * 10)
 print(final_df.to_string(index=False))
-pipeline.identify_error_patterns()
+print("=" * 10 + "Error Patterns" + "=" * 10)
+print(pipeline.identify_error_patterns())
 # final_df = final_df.register_natural_error(
 #     """DATA QUALITY ERROR: if the category is a 'Hummus, Dips, & Salsa' then the
 #     apistore_product must also be an actual 'Hummus, Dips, & Salsa'""",

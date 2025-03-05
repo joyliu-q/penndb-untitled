@@ -1,9 +1,16 @@
 # Pipeline Demo (EDF and Provenance Store)
 
+## Overview
+This project is divided into the following sections:
+- Error Detection (`edf.py`) and categorization (`error.py`)
+- Pipeline definition, stages, and pipeline generation (`pipeline.py`)
+- Agent library (`agent.py`)
+- Provenance Store (TODO: not implemented)
+- Example pipelines (`examples/`)
+    - `grocery.py` is a simple pipeline that loads data, cleans it, and merges it with web search results, as well as detecting errors for a self healing pipeline
 
 ## Installation
-
-Run example pipeline:
+After setting up the project as with an average `uv` project, run example pipeline:
 ```bash
 cd examples/data && uv run kaggle datasets download -d polartech/walmart-grocery-product-dataset && unzip walmart-grocery-product-dataset.zip
 

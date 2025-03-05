@@ -10,6 +10,8 @@ from edf import EDF
 import pandas as pd
 from pydantic import BaseModel
 from utils import get_llm
+import os
+import inspect
 
 from abc import ABC
 from langchain.docstore.document import Document
@@ -126,8 +128,11 @@ class Pipeline:
 
         return wrapper
 
-    def run(self) -> t.Dict[str, t.Any]:
-        """Execute the pipeline in dependency order"""
+    def run(self, debug: bool = True) -> t.Dict[str, t.Any]:
+        """Execute the pipeline in dependency order
+
+        If debug is True, writes the results of each stage to a separate CSV file, under the `debug` directory.
+        """
         results = {}
         executed = set()
 
@@ -160,6 +165,11 @@ class Pipeline:
                 stage.result = stage.execute(
                     dep_results
                 )  # Aggregate can take multiple dependencies
+
+            if debug:
+                if not os.path.exists(f"debug/{self.name}"):
+                    os.makedirs(f"debug/{self.name}", exist_ok=True)
+                stage.result.to_csv(f"debug/{self.name}/{stage.name}.csv")
 
             executed.add(stage.name)
             results[stage.name] = stage.result
@@ -201,31 +211,43 @@ class Pipeline:
     def identify_error_patterns(self) -> t.Union[str, t.Dict[str, t.List[ErrorPattern]]]:
         """Find patterns in the pipeline that are likely to cause errors.
 
-        For each stage in pipeline, reduce EDFs to only error rows.
-        Then, find patterns in the error rows using LLM.
-        Return a dict of stage name to list of error patterns.
-
-        Two types of error patterns:
-        - Stage-level error patterns
-        - Global error patterns
-
-        There could be a lot of error patterns, so we should try to use RAG to find the most relevant ones.
-
-        This method returns the error patterns, but also registers them in the pipeline.
+        For each stage in pipeline:
+        1. Create a document with the stage's source code
+        2. Create documents for error rows
+        3. Use RAG to analyze patterns with both code and error context
         """
         documents = []
+
+        for stage_name, stage in self.stages.items():
+            source_code = ""
+            if hasattr(stage, "_loader"):
+                source_code = inspect.getsource(stage._loader)
+            elif hasattr(stage, "_transformer"):
+                source_code = inspect.getsource(stage._transformer)
+            elif hasattr(stage, "_folder"):
+                source_code = inspect.getsource(stage._folder)
+            elif hasattr(stage, "_aggregator"):
+                source_code = inspect.getsource(stage._aggregator)
+
+            if source_code:
+                documents.append(
+                    Document(
+                        page_content=f"Stage Implementation for {stage_name}:\n\n{source_code}",
+                        metadata={"stage_name": stage_name, "doc_type": "source_code"},
+                    )
+                )
+
         for stage_name, stage in self.stages.items():
             error_df = stage.result.query_errors()
             if error_df.empty:
                 continue
 
-            # Each row could become a separate doc, or just one doc per stage:
-            # For demonstration, let's do 1 doc per error row
-
             for _, row in error_df.iterrows():
-                doc_text = f"Stage: {stage_name}\n\nError Row:\n{row.to_string(index=False)}"
                 documents.append(
-                    Document(page_content=doc_text, metadata={"stage_name": stage_name})
+                    Document(
+                        page_content=f"Stage: {stage_name}\n\nError Row:\n{row.to_string(index=False)}",
+                        metadata={"stage_name": stage_name, "doc_type": "error_data"},
+                    )
                 )
 
         if not documents:
@@ -234,8 +256,10 @@ class Pipeline:
         embeddings = OpenAIEmbeddings()
         db = Chroma.from_documents(documents, embeddings)
 
-        # Retrieval-based QA chain
-        retriever = db.as_retriever(search_kwargs={"k": 20})
+        retriever = db.as_retriever(
+            search_kwargs={"k": 20, "filter": {"doc_type": {"$in": ["source_code", "error_data"]}}}
+        )
+
         chain = RetrievalQA.from_chain_type(
             llm=get_llm(0.7),
             chain_type="stuff",
@@ -243,43 +267,16 @@ class Pipeline:
             return_source_documents=False,
         )
 
-        # Step 4: Query the chain asking it to identify patterns in the errors
-        # This is the "RAG" step: it retrieves the relevant docs and passes them to the LLM
-        query = "Identify common patterns or root causes of the errors in these stages."
+        query = """
+Currently, the pipeline is encountering the errors. Given the implementation code and error patterns, please identify:
+1. What errors we are currently encountering
+2. Based on the encountered errors, what are the most common patterns or root causes of errors
+3. Given these patterns, what are the most likely causes of the errors
+
+Consider both the stage implementations and the actual errors encountered."""
+
         result = chain.run(query)
-
         return result
-
-    # def identify_error_patterns(self) -> t.Dict[str, t.List[ErrorPattern]]:
-    #     error_by_stage = {}
-    #     for stage_name, stage in self.stages.items():
-    #         error_df = stage.result.query_errors()
-    #         relevant_error_df = error_df  # TODO: Use RAG to find the most relevant error rows.
-    #         error_df_str = relevant_error_df.to_string()
-    #         error_by_stage[stage_name] = f"""
-    #         ================================
-    #         Stage: {stage_name}
-    #         Depends on stages: {", ".join([dep.name for dep in stage.get_dependencies()])}
-    #         Error rows:
-    #         {error_df_str}
-    #         =================================
-    #         """
-    #     error_by_stage_str = "\n\n".join(error_by_stage.values())
-
-    #     # Use LLM to identify patterns in the error rows.
-    #     llm = get_llm(0.7)
-    #     template = PromptTemplate(
-    #         template="""
-    #         Given the following error rows, identify patterns in the errors.
-
-    #         {error_by_stage_str}
-    #         """,
-    #         input_variables=["error_by_stage_str"],
-    #     )
-    #     final_prompt = template.format(
-    #         error_by_stage_str=error_by_stage_str,
-    #     )
-    #     return llm.predict(final_prompt)
 
 
 class ExtractStage(ETLStage):

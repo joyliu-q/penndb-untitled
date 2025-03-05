@@ -6,6 +6,7 @@ from tqdm import tqdm
 from openai import OpenAI
 from langchain.prompts import PromptTemplate
 from utils import OPENAI_API_KEY, get_llm
+from agent import SearchSerperAgent
 
 import pandas as pd
 import typing as t
@@ -125,13 +126,31 @@ def clean_external_data(competitor_df: EDF) -> EDF:
     return competitor_df
 
 
+@pipeline.transform
+@pipeline_error_handler(
+    stage_name="enrich_internal_data_with_web",
+    error_classes=(KeyError, ValueError),
+    default_category=PipelineError.EXTERNAL_ERROR,
+)
+@pipeline.depends_on("load_internal_data")
+def enrich_internal_data_with_web(product_data_df: EDF) -> EDF:
+    """
+    Looks up product name and fetches additional information from the web
+    """
+
+    output_df = product_data_df.copy()
+    output_df["web_search_data"] = output_df["product"].apply(SearchSerperAgent.run)
+
+    return output_df
+
+
 @pipeline.aggregate
 @pipeline_error_handler(
     stage_name="merge_data",
     error_classes=(ValueError, RowLevelPipelineError),
     default_category=PipelineError.BAD_RESPONSE,
 )
-@pipeline.depends_on("load_internal_data", "clean_external_data")
+@pipeline.depends_on("enrich_internal_data_with_web", "clean_external_data")
 def merge_data(dfs: t.List[EDF]) -> EDF:
     internal_df, external_df = dfs
     limit_rows = 100

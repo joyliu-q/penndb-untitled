@@ -3,17 +3,15 @@ name = "experiment"
 version = "0.1.0"
 description = "EDF and Provenance Store"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "dotenv>=0.9.9",
-    "chromadb>=0.6.3",
     "flake8>=7.1.2",
     "graphviz>=0.20.3",
     "kaggle>=1.6.17",
     "kagglehub>=0.3.10",
     "langchain-community>=0.3.19",
     "langchain-core>=0.3.41",
-    "langchain-openai>=0.3.7",
     "numpy>=2.2.3",
     "openai>=1.65.2",
     "pandas>=2.2.3",
@@ -21,8 +19,11 @@ dependencies = [
     "requests>=2.32.3",
     "langchain>=0.3.20",
     "langchain-experimental>=0.3.4",
-    "langsmith>=0.3.11",
     "langgraph>=0.3.5",
+    "crewai[tools]>=0.102.0",
+    "langchain-openai>=0.2.14",
+    "langsmith>=0.1.147",
+    "chromadb>=0.5.23",
 ]
 
 [dependency-groups]

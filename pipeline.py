@@ -14,7 +14,7 @@ from utils import get_llm
 from abc import ABC
 from langchain.docstore.document import Document
 from langchain.embeddings.openai import OpenAIEmbeddings
-from langchain.vectorstores import Chroma  # or FAISS, Pinecone, etc.
+from langchain_community.vectorstores import Chroma
 from langchain.chains.retrieval_qa.base import RetrievalQA
 
 

@@ -264,7 +264,7 @@ class EDF(pd.DataFrame):
         Return just the query string. Example output: "age >= 0" or "score > 100".
         """
         response = self.openai_client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a pandas query generator."},
                 {"role": "user", "content": prompt},

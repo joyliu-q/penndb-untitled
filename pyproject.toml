@@ -5,6 +5,7 @@ description = "EDF and Provenance Store"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "dotenv>=0.9.9",
     "flake8>=7.1.2",
     "graphviz>=0.20.3",
     "kaggle>=1.6.17",

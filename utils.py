@@ -3,8 +3,9 @@ from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
 import numpy as np
+from dotenv import load_dotenv
 
-
+load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 embedding_model = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
 

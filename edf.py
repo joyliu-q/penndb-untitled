@@ -45,7 +45,6 @@ class EDF(pd.DataFrame):
 
         super().__init__(*args, **kwargs)
 
-
     def register_natural_error(self, condition: str) -> "EDF":
         """
         Register errors using a 'must' condition in natural language.

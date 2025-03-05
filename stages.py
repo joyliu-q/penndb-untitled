@@ -1,6 +1,7 @@
 import typing as t
 import pandas as pd
-from .edf import EDF
+from edf import EDF
+from abc import ABC
 
 T = t.TypeVar("T")
 
@@ -65,7 +66,7 @@ class Pipeline:
 
 
 # TODO: All stages belong to a pipeline, which thye must be registered to
-class ETLStage(t.ABC):
+class ETLStage(ABC):
     """Base class for all ETL stages."""
 
     def __init__(self, name: str):

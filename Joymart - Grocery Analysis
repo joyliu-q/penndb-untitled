@@ -1,0 +1,15 @@
+// Pipeline: Joymart - Grocery Analysis
+digraph {
+	rankdir=LR
+	load_internal_data [label=load_internal_data fillcolor=lightblue style=filled]
+	fetch_external_data [label=fetch_external_data fillcolor=lightblue style=filled]
+	clean_external_data [label=clean_external_data fillcolor=lightgreen style=filled]
+	merge_data [label=merge_data fillcolor=lightpink style=filled]
+	compare_products [label=compare_products fillcolor=lightyellow style=filled]
+	assess_aggregate_relationships [label=assess_aggregate_relationships fillcolor=lightyellow style=filled]
+	fetch_external_data -> clean_external_data
+	load_internal_data -> merge_data
+	clean_external_data -> merge_data
+	merge_data -> compare_products
+	compare_products -> assess_aggregate_relationships
+}

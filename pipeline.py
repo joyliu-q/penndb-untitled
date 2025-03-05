@@ -23,10 +23,10 @@ class ETLStage(ABC):
         self.dependencies: t.List[ETLStage] = []
         self.result = None
 
-    def add_dependency(self, stage: 'ETLStage'):
+    def add_dependency(self, stage: "ETLStage"):
         self.dependencies.append(stage)
 
-    def get_dependencies(self) -> t.List['ETLStage']:
+    def get_dependencies(self) -> t.List["ETLStage"]:
         return self.dependencies
 
     @property
@@ -47,27 +47,31 @@ class Pipeline:
 
     def depends_on(self, *stage_names: str):
         """Decorator to specify stage dependencies"""
+
         def decorator(func):
             @functools.wraps(func)
             def wrapper(*args, **kwargs):
                 return func(*args, **kwargs)
-            
+
             # Store dependencies to be resolved when the stage is created
             wrapper._dependencies = stage_names
             return wrapper
+
         return decorator
 
     def _create_stage(self, func: t.Callable, stage_class: t.Type[ETLStage]) -> ETLStage:
         """Helper to create a stage with dependencies"""
         stage = stage_class(func.__name__, func)
-        
+
         # Add explicit dependencies if specified
-        if hasattr(func, '_dependencies'):
+        if hasattr(func, "_dependencies"):
             for dep_name in func._dependencies:
                 if dep_name not in self.stages:
-                    raise ValueError(f"Dependency '{dep_name}' not found for stage '{func.__name__}'")
+                    raise ValueError(
+                        f"Dependency '{dep_name}' not found for stage '{func.__name__}'"
+                    )
                 stage.add_dependency(self.stages[dep_name])
-        
+
         return stage
 
     def extract(self, func: t.Callable[[], EDF]) -> t.Callable[[], EDF]:
@@ -77,6 +81,7 @@ class Pipeline:
 
         def wrapper() -> EDF:
             return stage.execute()
+
         return wrapper
 
     def transform(self, func: t.Callable[[EDF], EDF]) -> t.Callable[[EDF], EDF]:
@@ -129,14 +134,20 @@ class Pipeline:
                 stage.result = stage.execute()
             elif isinstance(stage, TransformStage):
                 if len(dep_results) != 1:
-                    raise ValueError(f"Transform stage {stage.name} expects exactly one dependency, got {len(dep_results)}")
+                    raise ValueError(
+                        f"Transform stage {stage.name} expects exactly one dependency, got {len(dep_results)}"
+                    )
                 stage.result = stage.execute(dep_results[0])
             elif isinstance(stage, FoldStage):
                 if len(dep_results) != 1:
-                    raise ValueError(f"Fold stage {stage.name} expects exactly one dependency, got {len(dep_results)}")
+                    raise ValueError(
+                        f"Fold stage {stage.name} expects exactly one dependency, got {len(dep_results)}"
+                    )
                 stage.result = stage.execute(dep_results[0])
             elif isinstance(stage, AggregateStage):
-                stage.result = stage.execute(dep_results)  # Aggregate can take multiple dependencies
+                stage.result = stage.execute(
+                    dep_results
+                )  # Aggregate can take multiple dependencies
 
             executed.add(stage.name)
             results[stage.name] = stage.result
@@ -150,30 +161,30 @@ class Pipeline:
     def visualize(self, filename: t.Optional[str] = None) -> None:
         """
         Visualize the pipeline as a DAG using graphviz.
-        
+
         Args:
             filename: Name of the output file (without extension)
         """
-        dot = Digraph(comment=f'Pipeline: {self.name}')
-        dot.attr(rankdir='LR')
+        dot = Digraph(comment=f"Pipeline: {self.name}")
+        dot.attr(rankdir="LR")
         if filename is None:
             filename = self.name
 
         for stage_name, stage in self.stages.items():
             color = {
-                ExtractStage: 'lightblue',
-                TransformStage: 'lightgreen',
-                FoldStage: 'lightyellow',
-                AggregateStage: 'lightpink'
-            }.get(type(stage), 'white')
-            
-            dot.node(stage_name, stage_name, style='filled', fillcolor=color)
+                ExtractStage: "lightblue",
+                TransformStage: "lightgreen",
+                FoldStage: "lightyellow",
+                AggregateStage: "lightpink",
+            }.get(type(stage), "white")
+
+            dot.node(stage_name, stage_name, style="filled", fillcolor=color)
 
         for stage_name, stage in self.stages.items():
             for dep in stage.get_dependencies():
                 dot.edge(dep.name, stage_name)
 
-        dot.render(filename, view=True, format='svg')
+        dot.render(filename, view=True, format="svg")
 
 
 class ExtractStage(ETLStage):

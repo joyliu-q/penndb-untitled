@@ -3,13 +3,10 @@ from error import PipelineError
 from examples.error_factory import rl_fetch
 from pipeline import Pipeline, RowLevelPipelineError, pipeline_error_handler
 from tqdm import tqdm
-from langchain_openai.embeddings import OpenAIEmbeddings
 from openai import OpenAI
-from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
-from utils import OPENAI_API_KEY
+from utils import OPENAI_API_KEY, get_llm
 
-import numpy as np
 import pandas as pd
 import typing as t
 import os
@@ -51,7 +48,6 @@ def load_internal_data() -> EDF:
             column="load_internal_data",
         )
         return edf
-
 
 
 @pipeline.extract
@@ -129,7 +125,6 @@ def clean_external_data(competitor_df: EDF) -> EDF:
     return competitor_df
 
 
-
 @pipeline.aggregate
 @pipeline_error_handler(
     stage_name="merge_data",
@@ -164,7 +159,7 @@ def merge_data(dfs: t.List[EDF]) -> EDF:
         ):
 
             internal_product = internal_row["product"]
-            
+
             system_prompt = "You are a helpful assistant. You will be given a product name and a list of products. Return ONLY the ID number of the best matching product, or -1 if no good match exists."
             user_prompt = f"""Compare this product name: "{internal_product}" with the following products and return the id of the best match. Return ONLY the ID number, nothing else.
 
@@ -237,7 +232,6 @@ Products:
         return edf
 
 
-
 @pipeline.fold
 @pipeline_error_handler(
     stage_name="compare_products",
@@ -303,49 +297,23 @@ def compare_products(merged_df: EDF) -> EDF:
     return EDF(results)
 
 
-pipeline.visualize()
-results = pipeline.run()
-step5_df = results["compare_products"]
-step5_df = step5_df.register_natural_error(
-    """DATA QUALITY ERROR: if the category is a 'Hummus, Dips, & Salsa' then the 
-    apistore_product must also be an actual 'Hummus, Dips, & Salsa'""",
+@pipeline.fold
+@pipeline_error_handler(
+    stage_name="assess_aggregate_relationships",
+    error_classes=(ValueError, RowLevelPipelineError),
+    default_category=PipelineError.BAD_RESPONSE,
 )
-step5_df.query_errors()
-
-# Varun Section
-# The following code is written by Varun Jane
-embedding_model = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
-
-
-def get_llm(temp=0.5):
-    return ChatOpenAI(model_name="gpt-4o", temperature=temp, openai_api_key=OPENAI_API_KEY)
-
-
-def get_embeddings():
-    return OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
-
-
-def generate_answer(retrieved_text, query):
-    llm = get_llm(0.2)
-
-    template = PromptTemplate(
-        template="""
-        Use the following context to answer the question:
-        {context}
-        Question: {query}
-        Answer:""",
-        input_variables=["context", "query"],
-    )
-    final_prompt = template.format(context=retrieved_text, query=query)
-    return llm.invoke(final_prompt)
-
-
-def compute_embedding(text: str) -> np.ndarray:
-    return np.array(embedding_model.embed_query(text))
-
-
-def assess_aggregate_relationships(joined_entry_list, headers, descriptor):
+@pipeline.depends_on("compare_products")
+def assess_aggregate_relationships(dataframe: EDF) -> str:
     llm = get_llm(0.7)
+    joined_entry_list = ", ".join(
+        [f"({', '.join([repr(value) for value in row])})" for row in dataframe.values]
+    )
+    descriptor = """Given the following products from competitors, and data about prices,
+    categories, ratings, generate a detailed competitor product analysis of the products
+    and categories, giving suggestions about our strategy"""
+
+    headers = ", ".join(dataframe.columns)
     template = PromptTemplate(
         template="""Here is a list of objects with data for the following attributes:
         {headers}
@@ -360,19 +328,12 @@ def assess_aggregate_relationships(joined_entry_list, headers, descriptor):
     return llm.predict(final_prompt)
 
 
-def generate_values_string(df):
-    return ", ".join([f"({', '.join([repr(value) for value in row])})" for row in df.values])
-
-
-print(generate_values_string(step5_df))
-print(", ".join(step5_df.columns))
-
-print(
-    assess_aggregate_relationships(
-        generate_values_string(step5_df.head()),
-        ", ".join(step5_df.columns),
-        """Given the following products from competitors, and data about prices, categories,
-        ratings, generate a detailed competitor product analysis of the products and categories,
-        giving suggestions about our strategy""",
-    )
-)
+pipeline.visualize()
+results = pipeline.run()
+final_df = results["assess_aggregate_relationships"]
+print(final_df)
+# final_df = final_df.register_natural_error(
+#     """DATA QUALITY ERROR: if the category is a 'Hummus, Dips, & Salsa' then the 
+#     apistore_product must also be an actual 'Hummus, Dips, & Salsa'""",
+# )
+# final_df.query_errors()

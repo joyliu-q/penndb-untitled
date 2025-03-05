@@ -1,6 +1,5 @@
 import os
-from langchain_openai.embeddings import OpenAIEmbeddings
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain.prompts import PromptTemplate
 import numpy as np
 from dotenv import load_dotenv

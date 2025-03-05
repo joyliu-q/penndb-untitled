@@ -11,10 +11,8 @@ import pandas as pd
 
 from abc import ABC
 
-T = t.TypeVar("T")
 
-
-# TODO: All stages belong to a pipeline, which thye must be registered to
+# TODO: All stages belong to a pipeline, which they must be registered to
 class ETLStage(ABC):
     """Base class for all ETL stages."""
 
@@ -94,12 +92,12 @@ class Pipeline:
 
         return wrapper
 
-    def fold(self, func: t.Callable[[EDF], T]) -> t.Callable[[EDF], T]:
+    def fold(self, func: t.Callable[[EDF], EDF]) -> t.Callable[[EDF], EDF]:
         """Decorator for creating a FoldStage."""
         stage = self._create_stage(func, FoldStage)
         self.add_stage(stage)
 
-        def wrapper(df: EDF) -> T:
+        def wrapper(df: EDF) -> EDF:
             return stage.execute(df)
 
         return wrapper
@@ -205,14 +203,14 @@ class TransformStage(ETLStage):
         return self._transformer(df)
 
 
-class FoldStage(ETLStage, t.Generic[T]):
-    """Stage that reduces a DataFrame to a single value."""
+class FoldStage(ETLStage):
+    """Stage that reduces a DataFrame to a single value (in a DataFrame)."""
 
-    def __init__(self, name: str, folder: t.Callable[[EDF], T]):
+    def __init__(self, name: str, folder: t.Callable[[EDF], EDF]):
         super().__init__(name)
         self._folder = folder
 
-    def execute(self, df: EDF) -> T:
+    def execute(self, df: EDF) -> EDF:
         return self._folder(df)
 
 
@@ -241,8 +239,8 @@ def clean_data(df: EDF) -> EDF:
 
 
 @pipeline.fold
-def calc_average(df: EDF) -> float:
-    return df.age.mean()
+def calc_average(df: EDF) -> EDF:
+    return EDF({"age": [df.age.mean()]})
 
 
 @pipeline.aggregate

@@ -304,7 +304,7 @@ def compare_products(merged_df: EDF) -> EDF:
     default_category=PipelineError.BAD_RESPONSE,
 )
 @pipeline.depends_on("compare_products")
-def assess_aggregate_relationships(dataframe: EDF) -> str:
+def assess_aggregate_relationships(dataframe: EDF) -> EDF:
     llm = get_llm(0.7)
     joined_entry_list = ", ".join(
         [f"({', '.join([repr(value) for value in row])})" for row in dataframe.values]
@@ -325,7 +325,8 @@ def assess_aggregate_relationships(dataframe: EDF) -> str:
     final_prompt = template.format(
         headers=headers, joined_entry_list=joined_entry_list, descriptor=descriptor
     )
-    return llm.predict(final_prompt)
+    output = llm.predict(final_prompt)
+    return EDF({"competitor_product_analysis": [output]})
 
 
 pipeline.visualize()
@@ -333,7 +334,7 @@ results = pipeline.run()
 final_df = results["assess_aggregate_relationships"]
 print(final_df)
 # final_df = final_df.register_natural_error(
-#     """DATA QUALITY ERROR: if the category is a 'Hummus, Dips, & Salsa' then the 
+#     """DATA QUALITY ERROR: if the category is a 'Hummus, Dips, & Salsa' then the
 #     apistore_product must also be an actual 'Hummus, Dips, & Salsa'""",
 # )
 # final_df.query_errors()

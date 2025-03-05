@@ -170,7 +170,7 @@ class Pipeline:
 
         return results
 
-    def visualize(self, filename: t.Optional[str] = None) -> None:
+    def visualize(self, filename: t.Optional[str] = None, open: bool = False) -> None:
         """
         Visualize the pipeline as a DAG using graphviz.
 
@@ -196,7 +196,7 @@ class Pipeline:
             for dep in stage.get_dependencies():
                 dot.edge(dep.name, stage_name)
 
-        dot.render(filename, view=True, format="svg")
+        dot.render(filename, view=open, format="svg")
 
     def identify_error_patterns(self) -> t.Union[str, t.Dict[str, t.List[ErrorPattern]]]:
         """Find patterns in the pipeline that are likely to cause errors.

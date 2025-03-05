@@ -13,10 +13,7 @@ import pandas as pd
 import typing as t
 import os
 
-pipeline = Pipeline(
-    "My ETL Pipeline",
-    redis_url="redis://localhost:6379/0"
-)
+pipeline = Pipeline("My ETL Pipeline", redis_url="redis://localhost:6379/0")
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -236,10 +233,16 @@ Products:
         )
         return edf
 
+
 @pipeline.transform
 @pipeline_error_handler(
     stage_name="merge_data",
-    error_classes=(requests.exceptions.RequestException, ValueError, KeyError, RowLevelPipelineError),
+    error_classes=(
+        requests.exceptions.RequestException,
+        ValueError,
+        KeyError,
+        RowLevelPipelineError,
+    ),
     default_category=PipelineError.EXTERNAL_ERROR,
 )
 @pipeline.depends_on("load_internal_data")
@@ -258,7 +261,7 @@ def enrich_internal_data_with_web(product_data_df: EDF) -> EDF:
                 row_idx=idx,
                 category=PipelineError.SERVICE_UNAVAILABLE,
                 description=f"Serper API request timed out. The service may be experiencing high load: {str(e)}",
-                column="web_search_data"
+                column="web_search_data",
             )
         except requests.exceptions.RequestException as e:
             if "Unauthorized" in str(e) or "403" in str(e):
@@ -266,15 +269,16 @@ def enrich_internal_data_with_web(product_data_df: EDF) -> EDF:
                     row_idx=idx,
                     category=PipelineError.UNAUTHORIZED,
                     description=f"Unauthorized access to Serper API. Please check API credentials: {str(e)}",
-                    column="web_search_data"
+                    column="web_search_data",
                 )
             raise RowLevelPipelineError(
                 row_idx=idx,
                 category=PipelineError.SERVICE_UNAVAILABLE,
                 description=f"Error accessing Serper API: {str(e)}",
-                column="web_search_data"
+                column="web_search_data",
             )
     return output_df
+
 
 @pipeline.fold
 @pipeline_error_handler(

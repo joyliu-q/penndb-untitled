@@ -24,6 +24,7 @@ dependencies = [
     "langchain-openai>=0.2.14",
     "langsmith>=0.1.147",
     "chromadb>=0.5.23",
+    "redis>=5.2.1",
 ]
 
 [dependency-groups]

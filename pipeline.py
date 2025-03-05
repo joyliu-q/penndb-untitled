@@ -41,7 +41,9 @@ class ETLStage(ABC):
         self.name = name
         self.dependencies: t.List[ETLStage] = []
         self.result = None
-        self.row_dependencies: t.Dict[int, t.List[t.Tuple[str, int]]] = {}  # {output_row_id: [(stage_name, input_row_id)]}
+        self.row_dependencies: t.Dict[int, t.List[t.Tuple[str, int]]] = (
+            {}
+        )  # {output_row_id: [(stage_name, input_row_id)]}
 
     def add_dependency(self, stage: "ETLStage"):
         self.dependencies.append(stage)
@@ -65,7 +67,7 @@ class ETLStage(ABC):
 
     def _track_input_dependencies(self, input_df: EDF, output_row_idx: int):
         """Track dependencies from an input DataFrame to an output row"""
-        if hasattr(input_df, '_source_stage') and hasattr(input_df, '_source_row_id'):
+        if hasattr(input_df, "_source_stage") and hasattr(input_df, "_source_row_id"):
             self.add_row_dependency(output_row_idx, input_df._source_stage, input_df._source_row_id)
 
     def _tag_output_rows(self, df: EDF):
@@ -81,31 +83,31 @@ class Pipeline:
         self.name = name
         self.stages: t.Dict[str, ETLStage] = {}
         self.last_stage: t.Optional[ETLStage] = None
-        
+
         # Initialize Redis connection if URL provided
         self.redis_client = None
         if redis_url:
             self.redis_client = redis.from_url(redis_url)
-            
+
     def _cache_key(self, stage_name: str, row_id: int) -> str:
         """Generate a unique cache key for a stage's row"""
         return f"{self.name}:{stage_name}:{row_id}"
-    
+
     def _set_cache(self, stage_name: str, row_id: int, value: pd.Series):
         """Store a row's data in Redis cache"""
         if not self.redis_client:
             return
-            
+
         key = self._cache_key(stage_name, row_id)
         # Serialize the pandas Series to bytes
         serialized = pickle.dumps(value)
         self.redis_client.set(key, serialized)
-        
+
     def _get_cache(self, stage_name: str, row_id: int) -> Optional[pd.Series]:
         """Retrieve a row's data from Redis cache"""
         if not self.redis_client:
             return None
-            
+
         key = self._cache_key(stage_name, row_id)
         cached = self.redis_client.get(key)
         if cached:
@@ -114,12 +116,12 @@ class Pipeline:
             except (pickle.PickleError, TypeError):
                 return None
         return None
-        
+
     def _clear_stage_cache(self, stage_name: str):
         """Clear all cached data for a stage"""
         if not self.redis_client:
             return
-            
+
         pattern = f"{self.name}:{stage_name}:*"
         keys = self.redis_client.keys(pattern)
         if keys:
@@ -199,11 +201,15 @@ class Pipeline:
 
         return wrapper
 
-    def _track_dependencies(self, stage: ETLStage, input_rows: t.List[pd.Series], output_row_idx: int):
+    def _track_dependencies(
+        self, stage: ETLStage, input_rows: t.List[pd.Series], output_row_idx: int
+    ):
         """Track which input rows contributed to an output row"""
         for input_row in input_rows:
-            if hasattr(input_row, '_source_stage') and hasattr(input_row, '_source_row_id'):
-                stage.add_row_dependency(output_row_idx, input_row._source_stage, input_row._source_row_id)
+            if hasattr(input_row, "_source_stage") and hasattr(input_row, "_source_row_id"):
+                stage.add_row_dependency(
+                    output_row_idx, input_row._source_stage, input_row._source_row_id
+                )
 
     def run(self, debug: bool = True) -> t.Dict[str, t.Any]:
         """Execute the pipeline in dependency order with Redis caching"""
@@ -223,7 +229,7 @@ class Pipeline:
             if stage.name in changed_rows:
                 affected_rows = changed_rows[stage.name]
                 cached_result = stage.result if stage.has_run else EDF()
-                
+
                 if isinstance(stage, ExtractStage):
                     stage.result = stage.execute()
                 elif isinstance(stage, TransformStage):
@@ -381,7 +387,7 @@ Consider both the stage implementations and the actual errors encountered."""
         """Clear all cached data for this pipeline"""
         if not self.redis_client:
             return
-            
+
         pattern = f"{self.name}:*"
         keys = self.redis_client.keys(pattern)
         if keys:

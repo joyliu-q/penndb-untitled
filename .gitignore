@@ -2,3 +2,6 @@ __pycache__/
 .venv/
 notes/
 data/
+.vscode/
+*.env
+.DS_Store

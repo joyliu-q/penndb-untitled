@@ -5,6 +5,8 @@
 
 Run example pipeline:
 ```bash
+cd examples/data && kaggle datasets download -d polartech/walmart-grocery-product-dataset && unzip walmart-grocery-product-dataset.zip
+
 uv run python -m  examples.grocery
 ```
 

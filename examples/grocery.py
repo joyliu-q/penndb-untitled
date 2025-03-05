@@ -332,7 +332,8 @@ def assess_aggregate_relationships(dataframe: EDF) -> EDF:
 pipeline.visualize()
 results = pipeline.run()
 final_df = results["assess_aggregate_relationships"]
-print(final_df)
+print(final_df.to_string(index=False))
+pipeline.identify_error_patterns()
 # final_df = final_df.register_natural_error(
 #     """DATA QUALITY ERROR: if the category is a 'Hummus, Dips, & Salsa' then the
 #     apistore_product must also be an actual 'Hummus, Dips, & Salsa'""",

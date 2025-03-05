@@ -8,11 +8,25 @@ from graphviz import Digraph
 from error import PipelineError
 from edf import EDF
 import pandas as pd
+from pydantic import BaseModel
+from utils import get_llm
 
 from abc import ABC
+from langchain.docstore.document import Document
+from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.vectorstores import Chroma  # or FAISS, Pinecone, etc.
+from langchain.chains.retrieval_qa.base import RetrievalQA
 
 
-# TODO: All stages belong to a pipeline, which they must be registered to
+class ErrorPattern(BaseModel):
+    """A pattern in the error rows of a stage."""
+
+    type: t.Literal["stage", "global"]
+    stage_name: t.Optional[str] = None
+    description: str
+
+
+# TODO: All stages belong to a pipeline, which thye must be registered to
 class ETLStage(ABC):
     """Base class for all ETL stages."""
 
@@ -183,6 +197,89 @@ class Pipeline:
                 dot.edge(dep.name, stage_name)
 
         dot.render(filename, view=True, format="svg")
+
+    def identify_error_patterns(self) -> t.Union[str, t.Dict[str, t.List[ErrorPattern]]]:
+        """Find patterns in the pipeline that are likely to cause errors.
+
+        For each stage in pipeline, reduce EDFs to only error rows.
+        Then, find patterns in the error rows using LLM.
+        Return a dict of stage name to list of error patterns.
+
+        Two types of error patterns:
+        - Stage-level error patterns
+        - Global error patterns
+
+        There could be a lot of error patterns, so we should try to use RAG to find the most relevant ones.
+
+        This method returns the error patterns, but also registers them in the pipeline.
+        """
+        documents = []
+        for stage_name, stage in self.stages.items():
+            error_df = stage.result.query_errors()
+            if error_df.empty:
+                continue
+
+            # Each row could become a separate doc, or just one doc per stage:
+            # For demonstration, let's do 1 doc per error row
+
+            for _, row in error_df.iterrows():
+                doc_text = f"Stage: {stage_name}\n\nError Row:\n{row.to_string(index=False)}"
+                documents.append(
+                    Document(page_content=doc_text, metadata={"stage_name": stage_name})
+                )
+
+        if not documents:
+            return "No errors found in any stage."
+
+        embeddings = OpenAIEmbeddings()
+        db = Chroma.from_documents(documents, embeddings)
+
+        # Retrieval-based QA chain
+        retriever = db.as_retriever(search_kwargs={"k": 20})
+        chain = RetrievalQA.from_chain_type(
+            llm=get_llm(0.7),
+            chain_type="stuff",
+            retriever=retriever,
+            return_source_documents=False,
+        )
+
+        # Step 4: Query the chain asking it to identify patterns in the errors
+        # This is the "RAG" step: it retrieves the relevant docs and passes them to the LLM
+        query = "Identify common patterns or root causes of the errors in these stages."
+        result = chain.run(query)
+
+        return result
+
+    # def identify_error_patterns(self) -> t.Dict[str, t.List[ErrorPattern]]:
+    #     error_by_stage = {}
+    #     for stage_name, stage in self.stages.items():
+    #         error_df = stage.result.query_errors()
+    #         relevant_error_df = error_df  # TODO: Use RAG to find the most relevant error rows.
+    #         error_df_str = relevant_error_df.to_string()
+    #         error_by_stage[stage_name] = f"""
+    #         ================================
+    #         Stage: {stage_name}
+    #         Depends on stages: {", ".join([dep.name for dep in stage.get_dependencies()])}
+    #         Error rows:
+    #         {error_df_str}
+    #         =================================
+    #         """
+    #     error_by_stage_str = "\n\n".join(error_by_stage.values())
+
+    #     # Use LLM to identify patterns in the error rows.
+    #     llm = get_llm(0.7)
+    #     template = PromptTemplate(
+    #         template="""
+    #         Given the following error rows, identify patterns in the errors.
+
+    #         {error_by_stage_str}
+    #         """,
+    #         input_variables=["error_by_stage_str"],
+    #     )
+    #     final_prompt = template.format(
+    #         error_by_stage_str=error_by_stage_str,
+    #     )
+    #     return llm.predict(final_prompt)
 
 
 class ExtractStage(ETLStage):
